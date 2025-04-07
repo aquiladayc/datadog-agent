@@ -10,11 +10,10 @@ package crashreport
 
 import (
 	"fmt"
-	"net/http"
 
 	"github.com/DataDog/datadog-agent/pkg/collector/corechecks/system/wincrashdetect/probe"
 	pkgconfigsetup "github.com/DataDog/datadog-agent/pkg/config/setup"
-	sysprobeclient "github.com/DataDog/datadog-agent/pkg/system-probe/api/client"
+	sysprobeclient "github.com/DataDog/datadog-agent/pkg/system-probe/api/client/check"
 	sysconfig "github.com/DataDog/datadog-agent/pkg/system-probe/config"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/DataDog/datadog-agent/pkg/util/retry"
@@ -28,7 +27,7 @@ type WinCrashReporter struct {
 	baseKey          string
 	startupWarnCount int
 	hasRunOnce       bool
-	sysProbeClient   *http.Client
+	sysProbeClient   *sysprobeclient.Client
 }
 
 const (

@@ -10,7 +10,6 @@ package ebpf
 
 import (
 	"fmt"
-	"net/http"
 	"strings"
 
 	"gopkg.in/yaml.v2"
@@ -21,7 +20,7 @@ import (
 	core "github.com/DataDog/datadog-agent/pkg/collector/corechecks"
 	ebpfcheck "github.com/DataDog/datadog-agent/pkg/collector/corechecks/ebpf/probe/ebpfcheck/model"
 	pkgconfigsetup "github.com/DataDog/datadog-agent/pkg/config/setup"
-	sysprobeclient "github.com/DataDog/datadog-agent/pkg/system-probe/api/client"
+	sysprobeclient "github.com/DataDog/datadog-agent/pkg/system-probe/api/client/check"
 	sysconfig "github.com/DataDog/datadog-agent/pkg/system-probe/config"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/DataDog/datadog-agent/pkg/util/option"
@@ -39,7 +38,7 @@ type EBPFCheckConfig struct {
 // EBPFCheck grabs eBPF map/program/perf buffer metrics
 type EBPFCheck struct {
 	config             *EBPFCheckConfig
-	sysProbeClient     *http.Client
+	sysProbeClient     *sysprobeclient.Client
 	previousMapEntries map[string]int64
 	core.CheckBase
 }

@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	idleConnTimeout = 5 * time.Second
+	// IdleConnTimeout is the timeout for idle connections.
+	IdleConnTimeout = 5 * time.Second
 )
 
 // DialContextFunc returns a function to be used in http.Transport.DialContext for connecting to system-probe.

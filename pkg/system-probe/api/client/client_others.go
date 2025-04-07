@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	idleConnTimeout = 30 * time.Second
+	// IdleConnTimeout is the timeout for idle connections.
+	IdleConnTimeout = 30 * time.Second
 )
 
 // DialContextFunc is not supported on this platform.

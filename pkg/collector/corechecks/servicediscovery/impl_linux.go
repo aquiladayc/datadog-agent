@@ -15,6 +15,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/collector/corechecks/servicediscovery/model"
 	pkgconfigsetup "github.com/DataDog/datadog-agent/pkg/config/setup"
 	sysprobeclient "github.com/DataDog/datadog-agent/pkg/system-probe/api/client"
+	sysprobecheck "github.com/DataDog/datadog-agent/pkg/system-probe/api/client/check"
 	sysconfig "github.com/DataDog/datadog-agent/pkg/system-probe/config"
 )
 
@@ -26,13 +27,13 @@ func init() {
 
 type linuxImpl struct {
 	getDiscoveryServices func(client *http.Client) (*model.ServicesResponse, error)
-	sysProbeClient       *http.Client
+	sysProbeClient       *sysprobecheck.Client
 }
 
 func newLinuxImpl() (osImpl, error) {
 	return &linuxImpl{
 		getDiscoveryServices: getDiscoveryServices,
-		sysProbeClient:       sysprobeclient.Get(pkgconfigsetup.SystemProbe().GetString("system_probe_config.sysprobe_socket")),
+		sysProbeClient:       sysprobecheck.Get(pkgconfigsetup.SystemProbe().GetString("system_probe_config.sysprobe_socket")),
 	}, nil
 }
 
@@ -61,5 +62,5 @@ func getDiscoveryServices(client *http.Client) (*model.ServicesResponse, error) 
 }
 
 func (li *linuxImpl) DiscoverServices() (*model.ServicesResponse, error) {
-	return li.getDiscoveryServices(li.sysProbeClient)
+	return li.getDiscoveryServices(li.sysProbeClient.Client)
 }

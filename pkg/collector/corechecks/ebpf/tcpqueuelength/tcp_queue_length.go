@@ -9,8 +9,6 @@
 package tcpqueuelength
 
 import (
-	"net/http"
-
 	"gopkg.in/yaml.v2"
 
 	"github.com/DataDog/datadog-agent/comp/core/autodiscovery/integration"
@@ -21,7 +19,7 @@ import (
 	core "github.com/DataDog/datadog-agent/pkg/collector/corechecks"
 	"github.com/DataDog/datadog-agent/pkg/collector/corechecks/ebpf/probe/tcpqueuelength/model"
 	pkgconfigsetup "github.com/DataDog/datadog-agent/pkg/config/setup"
-	sysprobeclient "github.com/DataDog/datadog-agent/pkg/system-probe/api/client"
+	sysprobeclient "github.com/DataDog/datadog-agent/pkg/system-probe/api/client/check"
 	sysconfig "github.com/DataDog/datadog-agent/pkg/system-probe/config"
 	"github.com/DataDog/datadog-agent/pkg/util/cgroups"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
@@ -43,7 +41,7 @@ type TCPQueueLengthCheck struct {
 	core.CheckBase
 	instance       *TCPQueueLengthConfig
 	tagger         tagger.Component
-	sysProbeClient *http.Client
+	sysProbeClient *sysprobeclient.Client
 }
 
 // Factory creates a new check factory

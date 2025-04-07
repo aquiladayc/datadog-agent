@@ -10,7 +10,6 @@ package oomkill
 
 import (
 	"fmt"
-	"net/http"
 	"strings"
 
 	yaml "gopkg.in/yaml.v2"
@@ -24,7 +23,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/collector/corechecks/ebpf/probe/oomkill/model"
 	pkgconfigsetup "github.com/DataDog/datadog-agent/pkg/config/setup"
 	"github.com/DataDog/datadog-agent/pkg/metrics/event"
-	sysprobeclient "github.com/DataDog/datadog-agent/pkg/system-probe/api/client"
+	sysprobeclient "github.com/DataDog/datadog-agent/pkg/system-probe/api/client/check"
 	sysconfig "github.com/DataDog/datadog-agent/pkg/system-probe/config"
 	"github.com/DataDog/datadog-agent/pkg/util/cgroups"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
@@ -46,7 +45,7 @@ type OOMKillCheck struct {
 	core.CheckBase
 	instance       *OOMKillConfig
 	tagger         tagger.Component
-	sysProbeClient *http.Client
+	sysProbeClient *sysprobeclient.Client
 }
 
 // Factory creates a new check factory

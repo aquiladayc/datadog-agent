@@ -9,7 +9,6 @@ package gpu
 
 import (
 	"fmt"
-	"net/http"
 
 	"gopkg.in/yaml.v2"
 
@@ -28,7 +27,7 @@ import (
 	pkgconfigsetup "github.com/DataDog/datadog-agent/pkg/config/setup"
 	ddnvml "github.com/DataDog/datadog-agent/pkg/gpu/nvml"
 	ddmetrics "github.com/DataDog/datadog-agent/pkg/metrics"
-	sysprobeclient "github.com/DataDog/datadog-agent/pkg/system-probe/api/client"
+	sysprobeclient "github.com/DataDog/datadog-agent/pkg/system-probe/api/client/check"
 	sysconfig "github.com/DataDog/datadog-agent/pkg/system-probe/config"
 	"github.com/DataDog/datadog-agent/pkg/util/common"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
@@ -48,7 +47,7 @@ const (
 type Check struct {
 	core.CheckBase
 	config         *CheckConfig            // config for the check
-	sysProbeClient *http.Client            // sysProbeClient is used to communicate with system probe
+	sysProbeClient *sysprobeclient.Client  // sysProbeClient is used to communicate with system probe
 	activeMetrics  map[model.StatsKey]bool // activeMetrics is a set of metrics that have been seen in the current check run
 	collectors     []nvidia.Collector      // collectors for NVML metrics
 	tagger         tagger.Component        // Tagger instance to add tags to outgoing metrics
