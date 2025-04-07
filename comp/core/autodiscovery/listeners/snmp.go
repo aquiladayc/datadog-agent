@@ -413,7 +413,12 @@ func (l *SNMPListener) initializeIPAuthenticationCounter() {
 		}
 
 		forEachIP(startingIP, ipNet, func(currentIP net.IP) bool {
-			l.ipsCounter.Set(currentIP.String(), len(config.Authentications))
+			if ignored := config.IsIPIgnored(currentIP); ignored {
+				return true
+			}
+			count := l.ipsCounter.Get(currentIP.String())
+			l.ipsCounter.Set(currentIP.String(), count+len(config.Authentications))
+
 			return true
 		})
 	}
