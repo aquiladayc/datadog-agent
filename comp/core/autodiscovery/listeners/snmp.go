@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"expvar"
 	"fmt"
+	"math"
 	"net"
 	"strconv"
 	"strings"
@@ -66,6 +67,13 @@ type IPCounter interface {
 	GetAll() map[string]int
 }
 
+type DeviceFingerprintInfo struct {
+	Name        string
+	Description string
+	BootTimeMs  int64
+	IP          string
+}
+
 // SNMPListener implements SNMP discovery
 type SNMPListener struct {
 	sync.RWMutex
@@ -74,7 +82,8 @@ type SNMPListener struct {
 	stop                         chan bool
 	config                       snmp.ListenerConfig
 	services                     map[string]*SNMPService
-	devicesFoundByFingerprint    map[string]bool
+	devicesFoundByFingerprint    map[string]DeviceFingerprintInfo
+	fingerprintsByFuzzyHash      map[string][]string
 	ipsCounter                   IPCounter
 	pendingServicesByFingerprint map[string]*pendingService
 }
@@ -139,10 +148,12 @@ type SNMPService struct {
 var _ Service = &SNMPService{}
 
 type pendingService struct {
-	svc        *SNMPService
-	deviceHash string
-	authIndex  int
-	writeCache bool
+	svc                   *SNMPService
+	deviceHash            string
+	deviceFingerprintInfo DeviceFingerprintInfo
+	deviceFuzzyHash       string
+	authIndex             int
+	writeCache            bool
 }
 
 type snmpSubnet struct {
@@ -176,7 +187,8 @@ func NewSNMPListener(ServiceListernerDeps) (ServiceListener, error) {
 		services:                     map[string]*SNMPService{},
 		stop:                         make(chan bool),
 		config:                       snmpConfig,
-		devicesFoundByFingerprint:    map[string]bool{},
+		devicesFoundByFingerprint:    map[string]DeviceFingerprintInfo{},
+		fingerprintsByFuzzyHash:      map[string][]string{},
 		pendingServicesByFingerprint: map[string]*pendingService{},
 		ipsCounter:                   newIPAuthenticationCounter(),
 	}, nil
@@ -315,31 +327,32 @@ func (l *SNMPListener) checkDeviceForParams(params *gosnmp.GoSNMP, deviceIP stri
 	return true
 }
 
-func (l *SNMPListener) getDeviceFingerprint(authentication snmp.Authentication, subnet *snmpSubnet, deviceIP string) (string, error) {
+func (l *SNMPListener) getDeviceFingerprint(authentication snmp.Authentication, subnet *snmpSubnet, deviceIP string) (string, string, DeviceFingerprintInfo, error) {
 	params, err := authentication.BuildSNMPParams(deviceIP, subnet.config.Port)
 	if err != nil {
-		return "", fmt.Errorf("error building SNMP params for device %s: %w", deviceIP, err)
+		return "", "", DeviceFingerprintInfo{}, fmt.Errorf("error building SNMP params for device %s: %w", deviceIP, err)
 	}
 
 	if err := params.Connect(); err != nil {
-		return "", fmt.Errorf("error connecting to device %s: %w", deviceIP, err)
+		return "", "", DeviceFingerprintInfo{}, fmt.Errorf("error connecting to device %s: %w", deviceIP, err)
 	}
 
 	defer params.Conn.Close()
 
-	value, err := params.Get([]string{snmp.DeviceSysNameOid, snmp.DeviceSysUptimeOid, snmp.DeviceSysObjectIDOid})
+	value, err := params.Get([]string{snmp.DeviceSysNameOid, snmp.DeviceSysDescrOid, snmp.DeviceSysUptimeOid, snmp.DeviceSysObjectIDOid})
 	if err != nil {
-		return "", fmt.Errorf("error getting system info from device %s: %w", deviceIP, err)
+		return "", "", DeviceFingerprintInfo{}, fmt.Errorf("error getting system info from device %s: %w", deviceIP, err)
 	}
-	if len(value.Variables) < 3 || value.Variables[0].Value == nil || value.Variables[1].Value == nil || value.Variables[2].Value == nil {
-		return "", fmt.Errorf("insufficient data received from device %s", deviceIP)
+	if len(value.Variables) < 4 || value.Variables[0].Value == nil || value.Variables[1].Value == nil || value.Variables[2].Value == nil || value.Variables[3].Value == nil {
+		return "", "", DeviceFingerprintInfo{}, fmt.Errorf("insufficient data received from device %s", deviceIP)
 	}
 
 	sysName := string(value.Variables[0].Value.([]byte))
-	sysUptime := value.Variables[1].Value.(uint32)
-	sysObjectID := value.Variables[2].Value.(string)
+	sysDescr := string(value.Variables[1].Value.([]byte))
+	sysUptime := value.Variables[2].Value.(uint32)
+	sysObjectID := value.Variables[3].Value.(string)
 
-	log.Debugf("SNMP get sys infos to %s success: %s, %d, %s", deviceIP, sysName, sysUptime, sysObjectID)
+	log.Debugf("SNMP get sys infos to %s success: %s, %s, %d, %s", deviceIP, sysName, sysDescr, sysUptime, sysObjectID)
 
 	// sysUptime is in hundredths of a second, convert it to milliseconds
 	uptime := time.Duration(sysUptime*10) * time.Millisecond
@@ -354,18 +367,22 @@ func (l *SNMPListener) getDeviceFingerprint(authentication snmp.Authentication, 
 
 	log.Debugf("Boot time: %s for device %s", bootTime, deviceIP)
 
-	bootTimestamp := bootTime.Truncate(100 * time.Millisecond).UnixMilli() / 100
+	bootTimestamp := bootTime.UnixMilli()
 
 	log.Debugf("Boot timestamp: %d for device %s", bootTimestamp, deviceIP)
 
 	h := fnv.New64()
 	h.Write([]byte(sysName))                              //nolint:errcheck
 	h.Write([]byte(sysObjectID))                          //nolint:errcheck
+	h.Write([]byte(sysDescr))                              //nolint:errcheck
+
+	fuzzyHash := strconv.FormatUint(h.Sum64(), 16)
+
 	h.Write([]byte(strconv.FormatInt(bootTimestamp, 10))) //nolint:errcheck
 
 	hash := strconv.FormatUint(h.Sum64(), 16)
 
-	return hash, nil
+	return hash, fuzzyHash, DeviceFingerprintInfo{Name: sysName, Description: sysDescr, BootTimeMs: bootTimestamp, IP: deviceIP}, nil
 }
 
 func (l *SNMPListener) getDevicesFoundInSubnet(subnet snmpSubnet) []string {
@@ -580,15 +597,19 @@ func (l *SNMPListener) createService(entityID string, subnet *snmpSubnet, device
 	config.ContextEngineID = authentication.ContextEngineID
 	config.ContextName = authentication.ContextName
 
-	deviceHash, err := l.getDeviceFingerprint(authentication, subnet, deviceIP)
+	deviceHash, fuzzyHash, deviceFingerprintInfo, err := l.getDeviceFingerprint(authentication, subnet, deviceIP)
 	if err != nil {
 		log.Errorf("Error getting device fingerprint for device %s: %v", deviceIP, err)
 		return
 	}
 
-	if _, present := l.devicesFoundByFingerprint[deviceHash]; present {
-		log.Debugf("Device %s already discovered", deviceIP)
-		return
+	for _, fingerprint := range l.fingerprintsByFuzzyHash[fuzzyHash] {
+		existing := l.devicesFoundByFingerprint[fingerprint]
+		diff := math.Abs(float64(existing.BootTimeMs - deviceFingerprintInfo.BootTimeMs))
+		if diff <= float64(100) {
+			log.Debugf("Device %s already discovered", deviceIP)
+			return
+		}
 	}
 
 	svc := &SNMPService{
@@ -601,39 +622,48 @@ func (l *SNMPListener) createService(entityID string, subnet *snmpSubnet, device
 
 	previousIPsDiscovered := l.checkPreviousIPs(deviceIP)
 
+	pendingSvc := &pendingService{
+		svc:                   svc,
+		authIndex:             authIndex,
+		writeCache:            writeCache,
+		deviceHash:            deviceHash,
+		deviceFingerprintInfo: deviceFingerprintInfo,
+		deviceFuzzyHash:       fuzzyHash,
+	}
+
 	if !previousIPsDiscovered {
 		log.Debugf("Previous IPs not all scanned for device %s, adding to pending", deviceIP)
-		if existingSvc, present := l.pendingServicesByFingerprint[deviceHash]; present {
-			minIP := minimumIP(existingSvc.svc.deviceIP, deviceIP)
-			if minIP == deviceIP {
-				l.pendingServicesByFingerprint[deviceHash] = &pendingService{
-					svc:        svc,
-					authIndex:  authIndex,
-					writeCache: writeCache,
-					deviceHash: deviceHash,
+
+		// check all devices with the same fuzzy hash (aka same name and description)
+		for _, fingerprint := range l.fingerprintsByFuzzyHash[fuzzyHash] {
+
+			if existingSvc, present := l.pendingServicesByFingerprint[fingerprint]; present {
+				// check time difference between the two devices
+				diff := math.Abs(float64(existingSvc.deviceFingerprintInfo.BootTimeMs - deviceFingerprintInfo.BootTimeMs))
+				if diff <= float64(100) {
+					// check which device has the lowest IP
+					minIP := minimumIP(existingSvc.svc.deviceIP, deviceIP)
+					if minIP != deviceIP {
+						return
+					}
+					// remove the other device from the pending services
+					delete(l.pendingServicesByFingerprint, fingerprint)
 				}
 			}
-		} else {
-			l.pendingServicesByFingerprint[deviceHash] = &pendingService{
-				svc:        svc,
-				authIndex:  authIndex,
-				writeCache: writeCache,
-				deviceHash: deviceHash,
-			}
 		}
+
+		l.pendingServicesByFingerprint[deviceHash] = pendingSvc
+		l.fingerprintsByFuzzyHash[fuzzyHash] = append(l.fingerprintsByFuzzyHash[fuzzyHash], deviceHash)
+
 		return
 	}
 
-	l.registerService(&pendingService{
-		svc:        svc,
-		authIndex:  authIndex,
-		writeCache: writeCache,
-		deviceHash: deviceHash,
-	})
+	l.registerService(pendingSvc)
 }
 
 func (l *SNMPListener) registerService(pendingSvc *pendingService) {
-	l.devicesFoundByFingerprint[pendingSvc.deviceHash] = true
+	l.devicesFoundByFingerprint[pendingSvc.deviceHash] = pendingSvc.deviceFingerprintInfo
+	l.fingerprintsByFuzzyHash[pendingSvc.deviceFuzzyHash] = append(l.fingerprintsByFuzzyHash[pendingSvc.deviceFuzzyHash], pendingSvc.deviceHash)
 	l.services[pendingSvc.svc.entityID] = pendingSvc.svc
 	pendingSvc.svc.subnet.devices[pendingSvc.svc.entityID] = device{
 		IP:        net.ParseIP(pendingSvc.svc.deviceIP),
@@ -859,25 +889,17 @@ func GetSubnetVarKey(network string, cacheKey string) string {
 }
 
 func (l *SNMPListener) flushPendingServices() {
-	if len(l.pendingServicesByFingerprint) == 0 {
-		return
-	}
-
 	log.Debugf("Checking %d pending services", len(l.pendingServicesByFingerprint))
 
-	for fingerprint, pendingSvc := range l.pendingServicesByFingerprint {
+	for _, pendingSvc := range l.pendingServicesByFingerprint {
 		log.Debugf("Checking pending service for device %s", pendingSvc.svc.deviceIP)
 		previousIPsScanned := l.checkPreviousIPs(pendingSvc.svc.deviceIP)
 
 		if previousIPsScanned {
 			log.Debugf("All previous IPs scanned for device %s, activating service", pendingSvc.svc.deviceIP)
-			l.registerService(&pendingService{
-				svc:        pendingSvc.svc,
-				authIndex:  pendingSvc.authIndex,
-				writeCache: pendingSvc.writeCache,
-				deviceHash: pendingSvc.deviceHash,
-			})
-			delete(l.pendingServicesByFingerprint, fingerprint)
+
+			l.registerService(pendingSvc)
+			delete(l.pendingServicesByFingerprint, pendingSvc.deviceHash)
 		}
 	}
 }

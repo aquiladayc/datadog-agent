@@ -19,5 +19,8 @@ const DeviceSysUptimeOid = "1.3.6.1.2.1.1.3.0"
 // DeviceSysNameOid is the OID for the device system name
 const DeviceSysNameOid = "1.3.6.1.2.1.1.5.0"
 
+// DeviceSysDescrOid is the OID for the device system description
+const DeviceSysDescrOid = "1.3.6.1.2.1.1.1.0"
+
 // DeviceSysObjectIDOid is the OID for the device system object ID
 const DeviceSysObjectIDOid = "1.3.6.1.2.1.1.2.0"
