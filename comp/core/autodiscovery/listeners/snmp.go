@@ -342,17 +342,19 @@ func (l *SNMPListener) getDeviceFingerprint(authentication snmp.Authentication, 
 	log.Debugf("SNMP get sys infos to %s success: %s, %d, %s", deviceIP, sysName, sysUptime, sysObjectID)
 
 	// sysUptime is in hundredths of a second, convert it to milliseconds
-	uptime := time.Duration(sysUptime) * 10 * time.Millisecond
+	uptime := time.Duration(sysUptime*10) * time.Millisecond
+
+	log.Debugf("Uptime: %s for device %s", uptime, deviceIP)
 
 	now := time.Now()
+
+	log.Debugf("Now: %s for device %s", now, deviceIP)
+
 	bootTime := now.Add(-uptime)
 
 	log.Debugf("Boot time: %s for device %s", bootTime, deviceIP)
 
-	truncatedBootTime := bootTime.Truncate(10 * time.Millisecond)
-	log.Debugf("Truncated boot time: %s for device %s", truncatedBootTime, deviceIP)
-
-	bootTimestamp := truncatedBootTime.UnixMilli() / 10
+	bootTimestamp := bootTime.Truncate(100 * time.Millisecond).UnixMilli() / 100
 
 	log.Debugf("Boot timestamp: %d for device %s", bootTimestamp, deviceIP)
 
