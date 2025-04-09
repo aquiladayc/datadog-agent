@@ -18,22 +18,22 @@ import (
 
 // containerMutator describes something that can mutate a container.
 type containerMutator interface {
-	mutateContainer(c *corev1.Container, init bool) error
+	mutateContainer(c *corev1.Container) error
 }
 
 // containerMutatorFunc is a containerMutator as a function.
-type containerMutatorFunc func(c *corev1.Container, init bool) error
+type containerMutatorFunc func(c *corev1.Container) error
 
 // mutateContainer implements containerMutator for containerMutatorFunc.
-func (f containerMutatorFunc) mutateContainer(c *corev1.Container, init bool) error {
-	return f(c, init)
+func (f containerMutatorFunc) mutateContainer(c *corev1.Container) error {
+	return f(c)
 }
 
 type containerMutators []containerMutator
 
-func (mutators containerMutators) mutateContainer(c *corev1.Container, init bool) error {
+func (mutators containerMutators) mutateContainer(c *corev1.Container) error {
 	for _, m := range mutators {
-		if err := m.mutateContainer(c, init); err != nil {
+		if err := m.mutateContainer(c); err != nil {
 			return err
 		}
 	}
@@ -54,16 +54,18 @@ func (f podMutatorFunc) mutatePod(pod *corev1.Pod) error {
 	return f(pod)
 }
 
+// mutatePodContainers applies a containerMutator to all of
+// the containers of a pod.
 func mutatePodContainers(pod *corev1.Pod, mutator containerMutator) error {
 	for idx, c := range pod.Spec.InitContainers {
-		if err := mutator.mutateContainer(&c, true); err != nil {
+		if err := mutator.mutateContainer(&c); err != nil {
 			return err
 		}
 		pod.Spec.InitContainers[idx] = c
 	}
 
 	for idx, c := range pod.Spec.Containers {
-		if err := mutator.mutateContainer(&c, false); err != nil {
+		if err := mutator.mutateContainer(&c); err != nil {
 			return err
 		}
 		pod.Spec.Containers[idx] = c
@@ -89,7 +91,7 @@ var _ podMutator = (*initContainer)(nil)
 func (i initContainer) mutatePod(pod *corev1.Pod) error {
 	container := i.Container
 
-	if err := i.Mutators.mutateContainer(&container, true); err != nil {
+	if err := i.Mutators.mutateContainer(&container); err != nil {
 		return err
 	}
 
@@ -146,7 +148,7 @@ type volumeMount struct {
 var _ containerMutator = (*volumeMount)(nil)
 
 // mutateContainer implements containerMutator for volumeMount.
-func (v volumeMount) mutateContainer(c *corev1.Container, _ bool) error {
+func (v volumeMount) mutateContainer(c *corev1.Container) error {
 	mnt := v.VolumeMount
 	for idx, vol := range c.VolumeMounts {
 		if vol.Name == mnt.Name && vol.MountPath == mnt.MountPath {
@@ -179,14 +181,14 @@ func appendOrPrepend[T any](item T, toList []T, prepend bool) []T {
 	return append(toList, item)
 }
 
-type containerPredicate func(c *corev1.Container, init bool) bool
+type containerPredicate func(c *corev1.Container) bool
 
 func filteredContainerMutator(filter containerPredicate, m containerMutator) containerMutator {
-	return containerMutatorFunc(func(c *corev1.Container, init bool) error {
-		if filter != nil && !filter(c, init) {
+	return containerMutatorFunc(func(c *corev1.Container) error {
+		if filter != nil && !filter(c) {
 			return nil
 		}
-		return m.mutateContainer(c, init)
+		return m.mutateContainer(c)
 	})
 }
 
@@ -196,7 +198,7 @@ type containerEnvVarMutator struct {
 	Overwrite bool
 }
 
-func (e containerEnvVarMutator) mutateContainer(c *corev1.Container, _ bool) error {
+func (e containerEnvVarMutator) mutateContainer(c *corev1.Container) error {
 	for idx, env := range c.Env {
 		if env.Name == e.Name {
 			if !e.Overwrite {
@@ -246,7 +248,7 @@ type containerSecurityContext struct {
 	*corev1.SecurityContext
 }
 
-func (r containerSecurityContext) mutateContainer(c *corev1.Container, _ bool) error {
+func (r containerSecurityContext) mutateContainer(c *corev1.Container) error {
 	c.SecurityContext = r.SecurityContext
 	return nil
 }
@@ -255,7 +257,7 @@ type containerResourceRequirements struct {
 	corev1.ResourceRequirements
 }
 
-func (r containerResourceRequirements) mutateContainer(c *corev1.Container, _ bool) error {
+func (r containerResourceRequirements) mutateContainer(c *corev1.Container) error {
 	c.Resources = r.ResourceRequirements
 	return nil
 }

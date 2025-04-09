@@ -136,7 +136,7 @@ type libInfoLanguageDetection struct {
 }
 
 func (l *libInfoLanguageDetection) containerMutator(v version) containerMutator {
-	return containerMutatorFunc(func(c *corev1.Container, init bool) error {
+	return containerMutatorFunc(func(c *corev1.Container) error {
 		if !v.usesInjector() || l == nil {
 			return nil
 		}
@@ -161,7 +161,7 @@ func (l *libInfoLanguageDetection) containerMutator(v version) containerMutator 
 				key:     "DD_INSTRUMENTATION_LANGUAGE_DETECTION_INJECTION_ENABLED",
 				valFunc: identityValFunc(strconv.FormatBool(l.injectionEnabled)),
 			},
-		}).mutateContainer(c, init); err != nil {
+		}).mutateContainer(c); err != nil {
 			return err
 		}
 

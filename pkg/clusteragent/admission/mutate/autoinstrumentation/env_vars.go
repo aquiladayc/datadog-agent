@@ -67,7 +67,7 @@ type envVar struct {
 }
 
 // mutateContainer implements containerMutator for envVar.
-func (e envVar) mutateContainer(c *corev1.Container, _ bool) error {
+func (e envVar) mutateContainer(c *corev1.Container) error {
 	if e.isEligibleToInject != nil && !e.isEligibleToInject(c) {
 		return nil
 	}

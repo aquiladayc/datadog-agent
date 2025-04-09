@@ -92,7 +92,7 @@ func NewConfig(datadogConfig config.Component) (*Config, error) {
 			excludeContainerNames[n] = true
 		}
 	}
-	containerFilter := func(c *corev1.Container, _ bool) bool {
+	containerFilter := func(c *corev1.Container) bool {
 		_, exclude := excludeContainerNames[c.Name]
 		return !exclude
 	}
