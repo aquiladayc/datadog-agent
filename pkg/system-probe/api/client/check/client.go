@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"time"
 
+	pkgconfigsetup "github.com/DataDog/datadog-agent/pkg/config/setup"
 	sysprobeclient "github.com/DataDog/datadog-agent/pkg/system-probe/api/client"
 	"github.com/DataDog/datadog-agent/pkg/system-probe/config/types"
 	"github.com/DataDog/datadog-agent/pkg/telemetry"
@@ -47,15 +48,19 @@ var checkTelemetry = struct {
 var Get = funcs.MemoizeArgNoError(get)
 
 func get(socketPath string) *Client {
+	timeout := pkgconfigsetup.Datadog().GetDuration("check_system_probe_timeout")
 	return &Client{
 		Client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: timeout,
 			Transport: &http.Transport{
-				MaxIdleConns:          2,
-				IdleConnTimeout:       sysprobeclient.IdleConnTimeout,
-				DialContext:           sysprobeclient.DialContextFunc(socketPath),
-				TLSHandshakeTimeout:   1 * time.Second,
-				ResponseHeaderTimeout: 5 * time.Second,
+				MaxIdleConns:        2,
+				IdleConnTimeout:     sysprobeclient.IdleConnTimeout,
+				DialContext:         sysprobeclient.DialContextFunc(socketPath),
+				TLSHandshakeTimeout: 1 * time.Second,
+				// Most endpoints send the headers after doing their
+				// calculations, so set the ResponseHeaderTimeout to the same
+				// values as the main timeout.
+				ResponseHeaderTimeout: timeout,
 				ExpectContinueTimeout: 50 * time.Millisecond,
 			},
 		},
