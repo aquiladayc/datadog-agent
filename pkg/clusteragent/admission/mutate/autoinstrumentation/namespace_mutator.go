@@ -155,6 +155,7 @@ func (m *mutatorCore) injectTracers(pod *corev1.Pod, config extractedPodLibInfo)
 		// to all the init containers the init containers that we create.
 		initContainerMutators = m.newInitContainerMutators(requirements)
 		injectorOptions       = libRequirementOptions{
+			containerPredicate:    m.config.containerFilter,
 			initContainerMutators: initContainerMutators,
 		}
 
@@ -178,15 +179,6 @@ func (m *mutatorCore) injectTracers(pod *corev1.Pod, config extractedPodLibInfo)
 		log.Errorf("Cannot inject library injector into pod %s: %s", mutatecommon.PodString(pod), err)
 	}
 
-	// containerMutators is a collection of _other_ data we want to pass
-	// into the library requirements (like language detection metadata).
-	// these don't get set on the init containers (like the injector and libs),
-	// but they'll get set for all libraries, so we copy and add the field here.
-	containerRequirements := initContainerRequirements
-	containerRequirements.containerMutators = containerMutators{
-		config.languageDetection.containerMutator(m.config.version),
-	}
-
 	for _, lib := range config.libs {
 		injected := false
 		langStr := string(lib.lang)
@@ -194,12 +186,14 @@ func (m *mutatorCore) injectTracers(pod *corev1.Pod, config extractedPodLibInfo)
 			metrics.LibInjectionAttempts.Inc(langStr, strconv.FormatBool(injected), strconv.FormatBool(autoDetected), injectionType)
 		}()
 
-		// each library has a config reader for the language it's using
-		containerRequirements.podMutators = []podMutator{
-			configInjector.podMutator(lib.lang),
-		}
-
-		if err := lib.podMutator(m.config.version, containerRequirements).mutatePod(pod); err != nil {
+		if err := lib.podMutator(m.config.version, libRequirementOptions{
+			containerPredicate:    m.config.containerFilter,
+			containerMutators:     containerMutators,
+			initContainerMutators: initContainerMutators,
+			podMutators: []podMutator{
+				configInjector.podMutator(lib.lang),
+			},
+		}).mutatePod(pod); err != nil {
 			metrics.LibInjectionErrors.Inc(langStr, strconv.FormatBool(autoDetected), injectionType)
 			lastError = err
 			continue
