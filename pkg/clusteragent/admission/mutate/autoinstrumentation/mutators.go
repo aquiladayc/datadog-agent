@@ -17,27 +17,41 @@ import (
 
 // containerMutator describes something that can mutate a container.
 type containerMutator interface {
+	podMutator
+
 	mutateContainer(*corev1.Container) error
 }
 
 // containerMutatorFunc is a containerMutator as a function.
 type containerMutatorFunc func(*corev1.Container) error
 
+var _ podMutator = (*containerMutatorFunc)(nil)
+
 // mutateContainer implements containerMutator for containerMutatorFunc.
 func (f containerMutatorFunc) mutateContainer(c *corev1.Container) error {
 	return f(c)
 }
 
+func (f containerMutatorFunc) mutatePod(pod *corev1.Pod) error {
+	return mutatePodContainers(pod, f)
+}
+
 type containerMutators []containerMutator
 
-func (mutators containerMutators) mutateContainer(c *corev1.Container) error {
-	for _, m := range mutators {
+var _ podMutator = (*containerMutators)(nil)
+
+func (ms containerMutators) mutateContainer(c *corev1.Container) error {
+	for _, m := range ms {
 		if err := m.mutateContainer(c); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func (ms containerMutators) mutatePod(pod *corev1.Pod) error {
+	return mutatePodContainers(pod, ms)
 }
 
 // podMutator describes something that can mutate a pod.
@@ -160,6 +174,10 @@ func (v volumeMount) mutateContainer(c *corev1.Container) error {
 	return nil
 }
 
+func (v volumeMount) mutatePod(pod *corev1.Pod) error {
+	return mutatePodContainers(pod, v)
+}
+
 func (v volumeMount) readOnly() volumeMount { // nolint:unused
 	m := v.VolumeMount
 	m.ReadOnly = true
@@ -180,17 +198,6 @@ func appendOrPrepend[T any](item T, toList []T, prepend bool) []T {
 	return append(toList, item)
 }
 
-type containerPredicate func(c *corev1.Container) bool
-
-func filteredContainerMutator(filter containerPredicate, m containerMutator) containerMutator {
-	return containerMutatorFunc(func(c *corev1.Container) error {
-		if filter != nil && !filter(c) {
-			return nil
-		}
-		return m.mutateContainer(c)
-	})
-}
-
 func newConfigEnvVarFromBoolMutator(key string, val *bool) envVar {
 	value := stringValFromPointer(val, strconv.FormatBool)
 	return envVar{
@@ -205,6 +212,17 @@ func newConfigEnvVarFromStringMutator(key string, val *string) envVar {
 		key:     key,
 		valFunc: useExistingEnvValOr(value),
 	}
+}
+
+type containerPredicate func(c *corev1.Container) bool
+
+func filteredContainerMutator(filter containerPredicate, m containerMutator) containerMutator {
+	return containerMutatorFunc(func(c *corev1.Container) error {
+		if filter != nil && !filter(c) {
+			return nil
+		}
+		return m.mutateContainer(c)
+	})
 }
 
 // envVarMutator uses the envVar containerMutator to set the
@@ -223,16 +241,28 @@ type containerSecurityContext struct {
 	*corev1.SecurityContext
 }
 
+var _ podMutator = (*containerSecurityContext)(nil)
+
 func (r containerSecurityContext) mutateContainer(c *corev1.Container) error {
 	c.SecurityContext = r.SecurityContext
 	return nil
+}
+
+func (r containerSecurityContext) mutatePod(pod *corev1.Pod) error {
+	return mutatePodContainers(pod, r)
 }
 
 type containerResourceRequirements struct {
 	corev1.ResourceRequirements
 }
 
+var _ podMutator = (*containerResourceRequirements)(nil)
+
 func (r containerResourceRequirements) mutateContainer(c *corev1.Container) error {
 	c.Resources = r.ResourceRequirements
 	return nil
+}
+
+func (r containerResourceRequirements) mutatePod(pod *corev1.Pod) error {
+	return mutatePodContainers(pod, r)
 }

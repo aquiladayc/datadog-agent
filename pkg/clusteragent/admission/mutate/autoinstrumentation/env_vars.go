@@ -70,6 +70,8 @@ type envVar struct {
 	prepend            bool
 }
 
+var _ podMutator = (*envVar)(nil)
+
 func (e envVar) nextEnvVar(prior corev1.EnvVar, found bool) (corev1.EnvVar, error) {
 	if e.rawEnvVar != nil {
 		return *e.rawEnvVar, nil
@@ -119,6 +121,10 @@ func (e envVar) mutateContainer(c *corev1.Container) error {
 	}
 
 	return nil
+}
+
+func (e envVar) mutatePod(pod *corev1.Pod) error {
+	return mutatePodContainers(pod, e)
 }
 
 type envValFunc func(string) string
