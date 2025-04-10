@@ -232,7 +232,7 @@ func (s libInfoSource) instrumentationInstallTime() string {
 }
 
 func (s libInfoSource) podMutator(filter containerPredicate) podMutator {
-	mutators := filteredContainerMutator(filter, containerMutators{
+	return filteredContainerMutator(filter, containerMutators{
 		// inject DD_INSTRUMENTATION_INSTALL_TIME with current Unix time
 		envVarMutator(corev1.EnvVar{
 			Name:  instrumentationInstallTimeEnvVarName,
@@ -247,10 +247,6 @@ func (s libInfoSource) podMutator(filter containerPredicate) podMutator {
 			Name:  instrumentationInstallTypeEnvVarName,
 			Value: s.injectionType(),
 		}),
-	})
-
-	return podMutatorFunc(func(pod *corev1.Pod) error {
-		return mutatePodContainers(pod, mutators)
 	})
 }
 

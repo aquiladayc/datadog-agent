@@ -127,7 +127,7 @@ func newMutatorCore(config *Config, wmeta workloadmeta.Component, filter mutatec
 }
 
 func (m *mutatorCore) mutatePodContainers(pod *corev1.Pod, cm containerMutator) error {
-	return mutatePodContainers(pod, filteredContainerMutator(m.config.containerFilter, cm))
+	return filteredContainerMutator(m.config.containerFilter, cm).mutatePod(pod)
 }
 
 func (m *mutatorCore) injectTracers(pod *corev1.Pod, config extractedPodLibInfo) error {
