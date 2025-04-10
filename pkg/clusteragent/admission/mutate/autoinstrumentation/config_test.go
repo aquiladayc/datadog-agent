@@ -209,7 +209,7 @@ func TestNewInstrumentationConfig(t *testing.T) {
 				DisabledNamespaces: []string{},
 				InjectorImageTag:   "0",
 				Version:            "v2",
-				ExcludeContainers:  &ExcludeContainers{Names: []string{"istio-proxy"}},
+				ExcludeContainers:  &ExcludeContainers{Names: []string{"my-app", "your-app"}},
 				LibVersions:        map[string]string{},
 			},
 		},
