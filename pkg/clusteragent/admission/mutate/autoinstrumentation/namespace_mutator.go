@@ -397,23 +397,21 @@ func (m *mutatorCore) getAutoDetectedLibraries(pod *corev1.Pod) []libInfo {
 // * true - product activated, not overridable remotely
 // * false - product disactivated, not overridable remotely
 func securityClientLibraryConfigMutators(datadogConfig config.Component) containerMutators {
-	var mutators []containerMutator
 	asmEnabled := getOptionalBoolValue(datadogConfig, "admission_controller.auto_instrumentation.asm.enabled")
-	if asmEnabled != nil {
-		env := envVarFromBoolPointer("DD_APPSEC_ENABLED", asmEnabled)
-		mutators = append(mutators, containerEnvVarMutator{EnvVar: env})
-	}
-
 	iastEnabled := getOptionalBoolValue(datadogConfig, "admission_controller.auto_instrumentation.iast.enabled")
-	if iastEnabled != nil {
-		env := envVarFromBoolPointer("DD_IAST_ENABLED", iastEnabled)
-		mutators = append(mutators, containerEnvVarMutator{EnvVar: env})
+	asmScaEnabled := getOptionalBoolValue(datadogConfig, "admission_controller.auto_instrumentation.asm_sca.enabled")
+
+	var mutators []containerMutator
+	if asmEnabled != nil {
+		mutators = append(mutators, newConfigEnvVarFromBoolMutator("DD_APPSEC_ENABLED", asmEnabled))
 	}
 
-	asmScaEnabled := getOptionalBoolValue(datadogConfig, "admission_controller.auto_instrumentation.asm_sca.enabled")
+	if iastEnabled != nil {
+		mutators = append(mutators, newConfigEnvVarFromBoolMutator("DD_IAST_ENABLED", iastEnabled))
+	}
+
 	if asmScaEnabled != nil {
-		env := envVarFromBoolPointer("DD_APPSEC_SCA_ENABLED", asmScaEnabled)
-		mutators = append(mutators, containerEnvVarMutator{EnvVar: env})
+		mutators = append(mutators, newConfigEnvVarFromBoolMutator("DD_APPSEC_SCA_ENABLED", asmScaEnabled))
 	}
 
 	return mutators
@@ -425,11 +423,11 @@ func securityClientLibraryConfigMutators(datadogConfig config.Component) contain
 // * "false" - profiling deactivated, not overridable remotely
 // * "auto" - profiling activates per-process heuristically, not overridable remotely
 func profilingClientLibraryConfigMutators(datadogConfig config.Component) containerMutators {
-	var mutators []containerMutator
 	profilingEnabled := getOptionalStringValue(datadogConfig, "admission_controller.auto_instrumentation.profiling.enabled")
+
+	var mutators []containerMutator
 	if profilingEnabled != nil {
-		env := envVarFromStringPointer("DD_PROFILING_ENABLED", profilingEnabled)
-		mutators = append(mutators, containerEnvVarMutator{EnvVar: env})
+		mutators = append(mutators, newConfigEnvVarFromStringMutator("DD_PROFILING_ENABLED", profilingEnabled))
 	}
 
 	return mutators

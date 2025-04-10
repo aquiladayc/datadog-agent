@@ -13,7 +13,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/DataDog/datadog-agent/pkg/clusteragent/admission/mutate/common"
-	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
 
 // containerMutator describes something that can mutate a container.
@@ -192,56 +191,32 @@ func filteredContainerMutator(filter containerPredicate, m containerMutator) con
 	})
 }
 
-type containerEnvVarMutator struct {
-	corev1.EnvVar
-	Prepend   bool
-	Overwrite bool
-}
-
-func (e containerEnvVarMutator) mutateContainer(c *corev1.Container) error {
-	for idx, env := range c.Env {
-		if env.Name == e.Name {
-			if !e.Overwrite {
-				log.Debug("Ignoring container '%s': env var '%s' already exists", c.Name, env.Name)
-				return nil
-			}
-
-			log.Debugf("Overwriting container '%s' env var '%s'", c.Name, e.Name)
-			c.Env[idx] = e.EnvVar
-			return nil
-		}
-	}
-
-	c.Env = appendOrPrepend(e.EnvVar, c.Env, e.Prepend)
-	return nil
-}
-
-func envVarFromPointer[T any](name string, pointer *T, format func(T) string) corev1.EnvVar {
-	var val T
-	if pointer != nil {
-		val = *pointer
-	}
-
-	return corev1.EnvVar{
-		Name:  name,
-		Value: format(val),
+func newConfigEnvVarFromBoolMutator(key string, val *bool) envVar {
+	value := stringValFromPointer(val, strconv.FormatBool)
+	return envVar{
+		key:     key,
+		valFunc: useExistingEnvValOr(value),
 	}
 }
 
-func envVarFromBoolPointer(name string, pointer *bool) corev1.EnvVar {
-	return envVarFromPointer(name, pointer, boolEnvValue)
+func newConfigEnvVarFromStringMutator(key string, val *string) envVar {
+	value := stringValFromPointer(val, stringValue)
+	return envVar{
+		key:     key,
+		valFunc: useExistingEnvValOr(value),
+	}
 }
 
-func envVarFromStringPointer(name string, pointer *string) corev1.EnvVar {
-	return envVarFromPointer(name, pointer, stringEnvValue)
-}
-
-func boolEnvValue(in bool) string {
-	return strconv.FormatBool(in)
-}
-
-func stringEnvValue(in string) string {
-	return in
+// envVarMutator uses the envVar containerMutator to set the
+// raw EnvVar as given.
+//
+// It will prepend the environment variable for parity with mutate.InjectEnv.
+func envVarMutator(env corev1.EnvVar) envVar {
+	return envVar{
+		key:       env.Name,
+		rawEnvVar: &env,
+		prepend:   true,
+	}
 }
 
 type containerSecurityContext struct {

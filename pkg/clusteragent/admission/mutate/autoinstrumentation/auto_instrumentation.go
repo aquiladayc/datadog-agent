@@ -222,42 +222,35 @@ func (s libInfoSource) isFromLanguageDetection() bool {
 	return s == libInfoSourceSingleStepLangaugeDetection
 }
 
-func (s libInfoSource) podMutator(filter containerPredicate) podMutator {
-	// inject DD_INSTRUMENTATION_INSTALL_TIME with current Unix time
+func (s libInfoSource) instrumentationInstallTime() string {
 	instrumentationInstallTime := os.Getenv(instrumentationInstallTimeEnvVarName)
 	if instrumentationInstallTime == "" {
 		instrumentationInstallTime = common.ClusterAgentStartTime
 	}
 
-	instrumentationInstallTimeEnvVar := corev1.EnvVar{
-		Name:  instrumentationInstallTimeEnvVarName,
-		Value: instrumentationInstallTime,
-	}
+	return instrumentationInstallTime
+}
 
-	// inject DD_INSTRUMENTATION_INSTALL_ID with UUID created during the Agent install time
-	instrumentationInstallIDEnvVar := corev1.EnvVar{
-		Name:  instrumentationInstallIDEnvVarName,
-		Value: os.Getenv(instrumentationInstallIDEnvVarName),
-	}
+func (s libInfoSource) podMutator(filter containerPredicate) podMutator {
+	mutators := filteredContainerMutator(filter, containerMutators{
+		// inject DD_INSTRUMENTATION_INSTALL_TIME with current Unix time
+		envVarMutator(corev1.EnvVar{
+			Name:  instrumentationInstallTimeEnvVarName,
+			Value: s.instrumentationInstallTime(),
+		}),
+		// inject DD_INSTRUMENTATION_INSTALL_ID with UUID created during the Agent install time
+		envVarMutator(corev1.EnvVar{
+			Name:  instrumentationInstallIDEnvVarName,
+			Value: os.Getenv(instrumentationInstallIDEnvVarName),
+		}),
+		envVarMutator(corev1.EnvVar{
+			Name:  instrumentationInstallTypeEnvVarName,
+			Value: s.injectionType(),
+		}),
+	})
 
-	mutators := containerMutators{
-		containerEnvVarMutator{
-			EnvVar: instrumentationInstallTimeEnvVar,
-		},
-		containerEnvVarMutator{
-			EnvVar: instrumentationInstallIDEnvVar,
-		},
-		containerEnvVarMutator{
-			EnvVar: corev1.EnvVar{
-				Name:  instrumentationInstallTypeEnvVarName,
-				Value: s.injectionType(),
-			},
-		},
-	}
-
-	filtered := filteredContainerMutator(filter, mutators)
 	return podMutatorFunc(func(pod *corev1.Pod) error {
-		return mutatePodContainers(pod, filtered)
+		return mutatePodContainers(pod, mutators)
 	})
 }
 

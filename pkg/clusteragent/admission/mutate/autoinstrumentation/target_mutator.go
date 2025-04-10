@@ -179,21 +179,20 @@ func (m *TargetMutator) MutatePod(pod *corev1.Pod, ns string, _ dynamic.Interfac
 	}
 	extracted := m.core.initExtractedLibInfo(pod).withLibs(target.libVersions)
 
+	// Add the configuration for the security client library.
 	if err := m.core.mutatePodContainers(pod, m.securityClientLibraryMutator); err != nil {
 		return false, fmt.Errorf("error mutating pod for security client: %w", err)
 	}
 
+	// Add the configuration for profiling.
 	if err := m.core.mutatePodContainers(pod, m.profilingClientLibraryMutator); err != nil {
 		return false, fmt.Errorf("error mutating pod for profiling client: %w", err)
 	}
 
-	// Inject the tracer configs.
-	// We do this before lib injection to ensure DD_SERVICE is set
-	// if the user configures it in the target.
+	// Inject the tracer configs. We do this before lib injection to ensure DD_SERVICE is set if the user configures it
+	// in the target.
 	for _, envVar := range target.envVars {
-		_ = m.core.mutatePodContainers(pod, containerEnvVarMutator{
-			EnvVar: envVar,
-		})
+		_ = m.core.mutatePodContainers(pod, envVarMutator(envVar))
 	}
 
 	// Inject the libraries.
@@ -203,10 +202,10 @@ func (m *TargetMutator) MutatePod(pod *corev1.Pod, ns string, _ dynamic.Interfac
 	}
 
 	// Inject the target json. The is added so that the injector can make use of the target information.
-	mutatecommon.InjectEnv(pod, corev1.EnvVar{
+	_ = m.core.mutatePodContainers(pod, envVarMutator(corev1.EnvVar{
 		Name:  AppliedTargetEnvVar,
 		Value: target.json,
-	})
+	}))
 
 	// Add the annotations to the pod.
 	mutatecommon.AddAnnotation(pod, AppliedTargetAnnotation, target.json)
