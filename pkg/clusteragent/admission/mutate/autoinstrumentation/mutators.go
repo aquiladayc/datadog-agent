@@ -18,11 +18,11 @@ import (
 
 // containerMutator describes something that can mutate a container.
 type containerMutator interface {
-	mutateContainer(c *corev1.Container) error
+	mutateContainer(*corev1.Container) error
 }
 
 // containerMutatorFunc is a containerMutator as a function.
-type containerMutatorFunc func(c *corev1.Container) error
+type containerMutatorFunc func(*corev1.Container) error
 
 // mutateContainer implements containerMutator for containerMutatorFunc.
 func (f containerMutatorFunc) mutateContainer(c *corev1.Container) error {
