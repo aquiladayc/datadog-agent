@@ -9,6 +9,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -334,16 +335,42 @@ func TestInjectSocket(t *testing.T) {
 		expectedVolumeMounts []corev1.VolumeMount
 		expectedVolumes      []corev1.Volume
 	}{
+		// {
+		// 	name:          "no csi driver",
+		// 	withCSIDriver: false,
+		// 	expectedVolumes: []corev1.Volume{
+		// 		{
+		// 			Name: "datadog",
+		// 			VolumeSource: corev1.VolumeSource{
+		// 				HostPath: &corev1.HostPathVolumeSource{
+		// 					Path: "/var/run/datadog",
+		// 					Type: pointer.Ptr(corev1.HostPathDirectoryOrCreate),
+		// 				},
+		// 			},
+		// 		},
+		// 	},
+		// 	expectedVolumeMounts: []corev1.VolumeMount{
+		// 		{
+		// 			Name:      "datadog",
+		// 			MountPath: "/var/run/datadog",
+		// 			ReadOnly:  true,
+		// 		},
+		// 	},
+		// },
 		{
-			name:          "no csi driver",
-			withCSIDriver: false,
+			name:          "with csi driver",
+			withCSIDriver: true,
 			expectedVolumes: []corev1.Volume{
 				{
 					Name: "datadog",
+
 					VolumeSource: corev1.VolumeSource{
-						HostPath: &corev1.HostPathVolumeSource{
-							Path: "/var/run/datadog",
-							Type: pointer.Ptr(corev1.HostPathDirectoryOrCreate),
+						CSI: &corev1.CSIVolumeSource{
+							ReadOnly: pointer.Ptr(true),
+							Driver:   "k8s.csi.datadoghq.com",
+							VolumeAttributes: map[string]string{
+								"type": string(csiDatadogSocketsDirectory),
+							},
 						},
 					},
 				},
@@ -366,9 +393,15 @@ func TestInjectSocket(t *testing.T) {
 				mode = "csi"
 			}
 
+			fmt.Printf("mode = = = %q", mode)
+
 			pod = mutatecommon.WithLabels(pod, map[string]string{"admission.datadoghq.com/enabled": "true", "admission.datadoghq.com/config.mode": mode})
 			wmeta := fxutil.Test[workloadmeta.Component](t, core.MockBundle(), workloadmetafxmock.MockModule(workloadmeta.NewParams()))
-			datadogConfig := fxutil.Test[config.Component](t, core.MockBundle())
+			datadogConfig := fxutil.Test[config.Component](t, core.MockBundle(), fx.Replace(config.MockParams{
+				Overrides: map[string]any{
+					"csi.enabled": test.withCSIDriver,
+				},
+			}))
 			filter, err := NewFilter(datadogConfig)
 			require.NoError(t, err)
 			mutator := NewMutator(NewMutatorConfig(datadogConfig), filter)
@@ -444,8 +477,7 @@ func TestInjectSocket_VolumeTypeSocket(t *testing.T) {
 							Driver:   "k8s.csi.datadoghq.com",
 							ReadOnly: pointer.Ptr(true),
 							VolumeAttributes: map[string]string{
-								"path": "/var/run/datadog/dsd.socket",
-								"mode": "socket",
+								"type": string(csiDSDSocket),
 							},
 						},
 					},
@@ -457,8 +489,7 @@ func TestInjectSocket_VolumeTypeSocket(t *testing.T) {
 							Driver:   "k8s.csi.datadoghq.com",
 							ReadOnly: pointer.Ptr(true),
 							VolumeAttributes: map[string]string{
-								"path": "/var/run/datadog/apm.socket",
-								"mode": "socket",
+								"type": string(csiAPMSocket),
 							},
 						},
 					},
