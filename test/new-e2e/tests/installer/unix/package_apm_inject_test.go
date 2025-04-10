@@ -32,6 +32,14 @@ func testApmInjectAgent(os e2eos.Descriptor, arch e2eos.Architecture, method Ins
 	}
 }
 
+func (s *packageApmInjectSuite) RunInstallScript(args ...string) {
+	s.packageBaseSuite.RunInstallScript(args...)
+	if s.os.Flavor == e2eos.Suse {
+		// Suse 15 has python3.6 installed, which breaks the injection. We link that python3 to the agent's which is usually python3.12
+		s.Env().RemoteHost.Execute("sudo cp -f /opt/datadog-packages/datadog-agent/stable/embedded/bin/python3 /usr/bin/python3")
+	}
+}
+
 func (s *packageApmInjectSuite) TestInstall() {
 	s.host.InstallDocker()
 	s.RunInstallScript("DD_APM_INSTRUMENTATION_ENABLED=all", "DD_APM_INSTRUMENTATION_LIBRARIES=python", envForceInstall("datadog-agent"))
@@ -163,6 +171,10 @@ func (s *packageApmInjectSuite) TestSystemdReload() {
 // TestUpgrade_InjectorDeb_To_InjectorOCI tests the upgrade from the DEB injector to the OCI injector.
 // Library package is OCI.
 func (s *packageApmInjectSuite) TestUpgrade_InjectorDeb_To_InjectorOCI() {
+	if s.os == e2eos.Suse15 {
+		s.T().Skip("Can't install APM deb/rpm packages on Suse, they were never released")
+	}
+
 	s.host.InstallDocker()
 
 	// Deb install using today's defaults
@@ -204,6 +216,10 @@ func (s *packageApmInjectSuite) TestUpgrade_InjectorDeb_To_InjectorOCI() {
 // TestUpgrade_InjectorOCI_To_InjectorDeb tests the upgrade from the OCI injector to the DEB injector.
 // Library package is OCI.
 func (s *packageApmInjectSuite) TestUpgrade_InjectorOCI_To_InjectorDeb() {
+	if s.os == e2eos.Suse15 {
+		s.T().Skip("Can't install APM deb/rpm packages on Suse, they were never released")
+	}
+
 	s.host.InstallDocker()
 
 	// OCI install
@@ -363,6 +379,10 @@ func (s *packageApmInjectSuite) TestUninstrument() {
 }
 
 func (s *packageApmInjectSuite) TestInstrumentScripts() {
+	if s.os == e2eos.Suse15 {
+		s.T().Skip("Can't install APM deb/rpm packages on Suse, they were never released")
+	}
+
 	s.host.InstallDocker()
 
 	// Deb install using today's defaults
