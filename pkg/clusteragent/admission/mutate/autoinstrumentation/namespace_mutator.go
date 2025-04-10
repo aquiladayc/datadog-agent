@@ -190,9 +190,7 @@ func (m *mutatorCore) injectTracers(pod *corev1.Pod, config extractedPodLibInfo)
 			containerPredicate:    m.config.containerFilter,
 			containerMutators:     containerMutators,
 			initContainerMutators: initContainerMutators,
-			podMutators: []podMutator{
-				configInjector.podMutator(lib.lang),
-			},
+			podMutators:           []podMutator{configInjector.podMutator(lib.lang)},
 		}).mutatePod(pod); err != nil {
 			metrics.LibInjectionErrors.Inc(langStr, strconv.FormatBool(autoDetected), injectionType)
 			lastError = err
